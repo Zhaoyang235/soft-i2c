@@ -4,10 +4,14 @@
 // #include "stm32f1xx_hal.h"
 #include "stm32f4xx_hal.h"
 
+// 硬件引脚配置
 #define SW_I2C1_SCL_PORT    GPIOB
 #define SW_I2C1_SDA_PORT    GPIOB
 #define SW_I2C1_SCL_PIN     GPIO_PIN_6
 #define SW_I2C1_SDA_PIN     GPIO_PIN_7
+
+// M3内核DWT32位计数器地址
+#define  DWT_CYCCNT  *(volatile unsigned int *)0xE0001004
 
 
 //引脚置位
@@ -90,13 +94,28 @@ static int sw_i2c_port_initial(void)
     return 0;
 }
 
-static void sw_i2c_port_delay_us(uint32_t us)
+// stm32f103最大超时时间 60s = 2^32 / 72000000
+void bsp_DelayUS(uint32_t _ulDelayTime)
 {
-    uint32_t nCount = us/10*25;
-    for (; nCount != 0; nCount--);
+    uint32_t tCnt, tDelayCnt;
+    uint32_t tStart;
+
+    tStart = DWT_CYCCNT;                                     /* 刚进入时的计数器值 */
+    tCnt = 0;
+    tDelayCnt = _ulDelayTime * (SystemCoreClock / 1000000);	 /* 需要的节拍数 */
+
+    while(tCnt < tDelayCnt)
+    {
+        tCnt = DWT_CYCCNT - tStart; /* 求减过程中，如果发生第一次32位计数器重新计数，依然可以正确计算 */
+    }
 }
 
-static int sw_i2c_port_io_ctl(uint8_t opt, void *param)
+static void sw_i2c_port_delay_us(uint32_t us)
+{
+	bsp_DelayUs(us);
+}
+
+static int sw_i2c_port_io_ctl(hal_io_opt_e opt, void *param)
 {
     int ret = -1;
     switch (opt)
